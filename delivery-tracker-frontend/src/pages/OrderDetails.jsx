@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { orderService } from '../services/api';
+import { orderService, trackingService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Card, StatusBadge, Loading } from '../components/ui';
 import { formatDate, formatAddress, ORDER_STATUS } from '../utils/constants';
@@ -33,6 +33,7 @@ export default function OrderDetails() {
   const { isAdmin } = useAuth();
   
   const [order, setOrder] = useState(null);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
@@ -46,6 +47,16 @@ export default function OrderDetails() {
     try {
       const data = await orderService.getById(id);
       setOrder(data);
+      
+      // Buscar eventos do histórico via endpoint de tracking
+      if (data.tracking_code) {
+        try {
+          const trackingData = await trackingService.track(data.tracking_code);
+          setEvents(trackingData.events || []);
+        } catch (trackErr) {
+          console.error('Erro ao carregar histórico:', trackErr);
+        }
+      }
     } catch (err) {
       if (err.response?.status === 404) {
         setError('Pedido não encontrado');
@@ -59,10 +70,18 @@ export default function OrderDetails() {
   };
 
   const handleStatusUpdate = async (newStatus) => {
+    if (!isAdmin) return; // Segurança extra no frontend
+    
     setUpdating(true);
     try {
       const updated = await orderService.updateStatus(id, newStatus);
       setOrder(updated);
+      
+      // Recarregar eventos após atualização
+      if (updated.tracking_code) {
+        const trackingData = await trackingService.track(updated.tracking_code);
+        setEvents(trackingData.events || []);
+      }
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
     }
@@ -140,7 +159,8 @@ export default function OrderDetails() {
               </Button>
             </Link>
             
-            {order.status !== 'delivered' && order.status !== 'canceled' && (
+            {/* Apenas admin pode alterar status */}
+            {isAdmin && order.status !== 'delivered' && order.status !== 'canceled' && (
               <>
                 {nextStatus && (
                   <Button
@@ -243,7 +263,7 @@ export default function OrderDetails() {
 
             {/* Events */}
             <div className="space-y-6">
-              {order.events?.map((event, index) => {
+              {events.length > 0 ? events.map((event, index) => {
                 const Icon = eventIcons[event.status] || Package;
                 const isLatest = index === 0;
                 
@@ -278,10 +298,8 @@ export default function OrderDetails() {
                     </div>
                   </div>
                 );
-              })}
-
-              {/* Fallback if no events */}
-              {(!order.events || order.events.length === 0) && (
+              }) : (
+                /* Fallback if no events */
                 <div className="relative flex gap-4">
                   <div className="relative z-10 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                     <Package className="w-5 h-5 text-white" />
