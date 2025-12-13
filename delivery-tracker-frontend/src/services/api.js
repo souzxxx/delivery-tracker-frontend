@@ -40,7 +40,7 @@ export const authService = {
     const formData = new URLSearchParams();
     formData.append('username', email);
     formData.append('password', password);
-    
+
     const response = await api.post('/auth/login', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
@@ -54,7 +54,7 @@ export const userService = {
     const response = await api.post('/users', userData);
     return response.data;
   },
-  
+
   getMe: async () => {
     const response = await api.get('/users/me');
     return response.data;
@@ -67,23 +67,23 @@ export const orderService = {
     const response = await api.post('/orders', orderData);
     return response.data;
   },
-  
+
   getMyOrders: async () => {
     const response = await api.get('/orders');
     return response.data;
   },
-  
+
   getAllOrders: async (statusFilter = null) => {
     const params = statusFilter ? { status_filter: statusFilter } : {};
     const response = await api.get('/orders/all', { params });
     return response.data;
   },
-  
+
   getById: async (id) => {
     const response = await api.get(`/orders/${id}`);
     return response.data;
   },
-  
+
   updateStatus: async (id, status) => {
     const response = await api.patch(`/orders/${id}/status`, { status });
     return response.data;
@@ -94,6 +94,15 @@ export const orderService = {
 export const trackingService = {
   track: async (trackingCode) => {
     const response = await api.get(`/track/${trackingCode}`);
+    return response.data;
+  },
+};
+
+// ============ ADDRESS ============
+export const addressService = {
+  getByCep: async (cep) => {
+    // Agora chama o endpoint dentro do roteador de pedidos
+    const response = await api.get(`/orders/cep/${cep}`);
     return response.data;
   },
 };

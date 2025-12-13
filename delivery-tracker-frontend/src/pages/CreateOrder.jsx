@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { orderService } from '../services/api';
+import { orderService, addressService } from '../services/api';
 import { Button, Input, Card } from '../components/ui';
-import { 
-  MapPin, 
-  Package, 
-  ArrowRight, 
+import {
+  MapPin,
+  Package,
+  ArrowRight,
   Home,
   Building,
   Hash,
@@ -18,15 +18,23 @@ export default function CreateOrder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
-  
+
   const [origin, setOrigin] = useState({
     cep: '',
+    street: '',
+    neighborhood: '',
+    city: '',
+    state: '',
     number: '',
     complement: '',
   });
-  
+
   const [destination, setDestination] = useState({
     cep: '',
+    street: '',
+    neighborhood: '',
+    city: '',
+    state: '',
     number: '',
     complement: '',
   });
@@ -35,41 +43,49 @@ export default function CreateOrder() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    
+
     // Validação básica
     if (!origin.cep || !origin.number) {
       setError('Preencha o CEP e número da origem');
       setLoading(false);
       return;
     }
-    
+
     if (!destination.cep || !destination.number) {
       setError('Preencha o CEP e número do destino');
       setLoading(false);
       return;
     }
-    
+
     try {
       const orderData = {
         origin_address: {
           cep: origin.cep.replace(/\D/g, ''),
+          street: origin.street,
+          neighborhood: origin.neighborhood,
+          city: origin.city,
+          state: origin.state,
           number: origin.number,
           complement: origin.complement || null,
         },
         destination_address: {
           cep: destination.cep.replace(/\D/g, ''),
+          street: destination.street,
+          neighborhood: destination.neighborhood,
+          city: destination.city,
+          state: destination.state,
           number: destination.number,
           complement: destination.complement || null,
         },
       };
-      
+
       const newOrder = await orderService.create(orderData);
       setSuccess(newOrder);
     } catch (err) {
       const message = err.response?.data?.detail || 'Erro ao criar pedido';
       setError(message);
     }
-    
+
     setLoading(false);
   };
 
@@ -77,6 +93,55 @@ export default function CreateOrder() {
     const numbers = value.replace(/\D/g, '');
     if (numbers.length <= 5) return numbers;
     return `${numbers.slice(0, 5)}-${numbers.slice(5, 8)}`;
+  };
+
+  const handleCepBlur = async (type, cep) => {
+    console.log('handleCepBlur triggered', { type, cep });
+    const cleanCep = cep.replace(/\D/g, '');
+    console.log('cleanCep:', cleanCep);
+    if (cleanCep.length !== 8) {
+      console.log('CEP length invalid:', cleanCep.length);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('Fetching address for CEP:', cleanCep);
+      const addressData = await addressService.getByCep(cleanCep);
+      console.log('Address data received:', addressData);
+
+      if (addressData) {
+        if (addressData.erro) {
+          console.error('ViaCEP returned error');
+          setError('CEP não encontrado');
+          return;
+        }
+        if (type === 'origin') {
+          console.log('Updating origin');
+          setOrigin(prev => ({
+            ...prev,
+            street: addressData.street || addressData.logradouro || '',
+            neighborhood: addressData.neighborhood || addressData.bairro || '',
+            city: addressData.city || addressData.localidade || '',
+            state: addressData.state || addressData.uf || ''
+          }));
+        } else {
+          console.log('Updating destination');
+          setDestination(prev => ({
+            ...prev,
+            street: addressData.street || addressData.logradouro || '',
+            neighborhood: addressData.neighborhood || addressData.bairro || '',
+            city: addressData.city || addressData.localidade || '',
+            state: addressData.state || addressData.uf || ''
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      setError('Erro ao buscar dados do CEP: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Success Screen
@@ -87,14 +152,14 @@ export default function CreateOrder() {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-2xl shadow-green-500/30 mb-6 animate-pulse-glow">
             <Check className="w-10 h-10 text-white" />
           </div>
-          
+
           <h1 className="text-3xl font-bold text-white mb-2">
             Pedido Criado!
           </h1>
           <p className="text-slate-400 mb-6">
             Seu pedido foi registrado com sucesso
           </p>
-          
+
           <div className="inline-block px-6 py-4 bg-slate-800/50 rounded-xl mb-8">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
               Código de Rastreio
@@ -103,10 +168,10 @@ export default function CreateOrder() {
               {success.tracking_code}
             </p>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => navigate(`/orders/${success.id}`)}
             >
               Ver Detalhes
@@ -155,17 +220,51 @@ export default function CreateOrder() {
                 <p className="text-sm text-slate-400">De onde sai a entrega</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <Input
                 label="CEP"
                 placeholder="00000-000"
                 value={origin.cep}
                 onChange={(e) => setOrigin({ ...origin, cep: formatCEP(e.target.value) })}
+                onBlur={() => handleCepBlur('origin', origin.cep)}
                 icon={Home}
                 maxLength={9}
                 required
               />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Rua"
+                  placeholder="Nome da Rua"
+                  value={origin.street}
+                  onChange={(e) => setOrigin({ ...origin, street: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Bairro"
+                  placeholder="Bairro"
+                  value={origin.neighborhood}
+                  onChange={(e) => setOrigin({ ...origin, neighborhood: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Cidade"
+                  placeholder="Cidade"
+                  value={origin.city}
+                  onChange={(e) => setOrigin({ ...origin, city: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Estado"
+                  placeholder="UF"
+                  value={origin.state}
+                  onChange={(e) => setOrigin({ ...origin, state: e.target.value })}
+                  maxLength={2}
+                  required
+                />
+              </div>
               <Input
                 label="Número"
                 placeholder="123"
@@ -195,17 +294,51 @@ export default function CreateOrder() {
                 <p className="text-sm text-slate-400">Para onde vai a entrega</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <Input
                 label="CEP"
                 placeholder="00000-000"
                 value={destination.cep}
                 onChange={(e) => setDestination({ ...destination, cep: formatCEP(e.target.value) })}
+                onBlur={() => handleCepBlur('destination', destination.cep)}
                 icon={Building}
                 maxLength={9}
                 required
               />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Rua"
+                  placeholder="Nome da Rua"
+                  value={destination.street}
+                  onChange={(e) => setDestination({ ...destination, street: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Bairro"
+                  placeholder="Bairro"
+                  value={destination.neighborhood}
+                  onChange={(e) => setDestination({ ...destination, neighborhood: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Cidade"
+                  placeholder="Cidade"
+                  value={destination.city}
+                  onChange={(e) => setDestination({ ...destination, city: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Estado"
+                  placeholder="UF"
+                  value={destination.state}
+                  onChange={(e) => setDestination({ ...destination, state: e.target.value })}
+                  maxLength={2}
+                  required
+                />
+              </div>
               <Input
                 label="Número"
                 placeholder="456"
