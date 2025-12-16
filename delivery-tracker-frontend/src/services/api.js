@@ -64,12 +64,12 @@ export const userService = {
 // ============ ORDERS ============
 export const orderService = {
   create: async (orderData) => {
-    const response = await api.post('/orders', orderData);
+    const response = await api.post('/orders/', orderData);
     return response.data;
   },
 
   getMyOrders: async () => {
-    const response = await api.get('/orders');
+    const response = await api.get('/orders/');
     return response.data;
   },
 
